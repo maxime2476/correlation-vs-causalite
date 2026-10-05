@@ -228,7 +228,8 @@ def figure_stratification(df, n_tranches: int = 10):
 
 def figure_estimations(tableau_0, tableau_05, nom_fichier: str = "p2_06_estimations.png",
                        mots_biaises: tuple = ("naïf", "sans le carré"),
-                       legende_biais: str = "Confondeur ignoré ou mal modélisé"):
+                       legende_biais: str = "Confondeur ignoré ou mal modélisé",
+                       legende_correct: str = "Confondeur contrôlé"):
     """Estimations et IC à 95 % de chaque méthode, pour un effet vrai de 0 et de 0.5.
 
     Les méthodes dont le nom contient un des `mots_biaises` sont en orange, les autres en bleu.
@@ -246,8 +247,9 @@ def figure_estimations(tableau_0, tableau_05, nom_fichier: str = "p2_06_estimati
                             xerr=[[ligne["Effet estimé"] - ligne["IC 95 % bas"]],
                                   [ligne["IC 95 % haut"] - ligne["Effet estimé"]]],
                             markeredgecolor="white")
-            ax.text(ligne["Effet estimé"], pos + 0.27, f"{ligne['Effet estimé']:.3f}", ha="center", fontsize=8,
-                    color=TEXTE, zorder=5, bbox={"facecolor": "white", "edgecolor": "none", "pad": 1})
+            ax.annotate(f"{ligne['Effet estimé']:.3f}", (ligne["Effet estimé"], pos), xytext=(0, 9),
+                        textcoords="offset points", ha="center", fontsize=8, color=TEXTE, zorder=5,
+                        bbox={"facecolor": "white", "edgecolor": "none", "pad": 1})
         ax.axvline(effet_vrai, color=ROUGE, ls="--", lw=1.5)
         ax.set_title(f"Effet vrai = {effet_vrai}")
         ax.set_xlabel("Effet estimé des glaces sur les noyades")
@@ -256,7 +258,7 @@ def figure_estimations(tableau_0, tableau_05, nom_fichier: str = "p2_06_estimati
         ax.grid(axis="y", visible=False)
     # Légende construite à la main (couleur = la méthode tient compte correctement de la température ou non)
     axes[1].plot([], [], "o", color=ORANGE, label=legende_biais)
-    axes[1].plot([], [], "o", color=BLEU, label="Confondeur contrôlé")
+    axes[1].plot([], [], "o", color=BLEU, label=legende_correct)
     if tableau_0["IC 95 % bas"].isna().any():
         axes[1].plot([], [], "D", color=GRIS, label="Pas d'intervalle de confiance")
     axes[1].plot([], [], "--", color=ROUGE, label="Vraie valeur")
@@ -396,4 +398,77 @@ def figure_taille_echantillon(resume_taille):
         ax.legend(loc="upper right")
     fig.tight_layout()
     sauvegarder(fig, "p3_02_taille_echantillon.png")
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Partie 4 : agir sur le monde
+# ---------------------------------------------------------------------------
+
+def figure_intervention(tableau):
+    """Noyades moyennes : avant la taxe, prévisions des modèles, et réalité après la taxe."""
+    colonnes = [("Noyades observées", GRIS), ("Prévision du Gradient Boosting", ORANGE),
+                ("Prévision du Double ML", BLEU), ("Réalité après la taxe", VERT)]
+    fig, axes = plt.subplots(1, len(tableau), figsize=(5.5 * len(tableau), 4.3))
+    for ax, (_, ligne) in zip(axes, tableau.iterrows()):
+        valeurs = [ligne[nom] for nom, _ in colonnes]
+        barres = ax.bar(range(len(colonnes)), valeurs, color=[c for _, c in colonnes], width=0.65)
+        for barre, valeur in zip(barres, valeurs):
+            ax.text(barre.get_x() + barre.get_width() / 2, valeur, f"{valeur:.1f}", ha="center", va="bottom",
+                    fontsize=9, color=TEXTE)
+        ax.set_xticks(range(len(colonnes)))
+        ax.set_xticklabels(["Avant", "Prévision\nGB naïf", "Prévision\nDouble ML", "Réalité\naprès"], fontsize=9)
+        ax.set_title(f"Effet vrai des glaces = {ligne['Effet vrai']}")
+        ax.grid(axis="x", visible=False)
+    axes[0].set_ylabel("Noyades moyennes par jour")
+    fig.suptitle("Taxe qui divise par deux les ventes de glaces : que va-t-il se passer ?", fontweight="bold")
+    fig.tight_layout()
+    sauvegarder(fig, "p4_01_intervention.png")
+    return fig
+
+
+def figure_experience(observees, experience):
+    """Nuage noyades ~ glaces : données observées (confondues) contre expérience aléatoire."""
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.3), sharey=True)
+    panneaux = [(axes[0], observees, "Données observées"), (axes[1], experience, "Expérience aléatoire (glaces tirées au sort)")]
+    for ax, df, titre in panneaux:
+        points = ax.scatter(df["glaces"], df["noyades"], s=4, c=df["temperature"], cmap=CMAP_TEMPERATURE, alpha=0.6)
+        pente, constante = np.polyfit(df["glaces"], df["noyades"], 1)
+        x = np.linspace(df["glaces"].min(), df["glaces"].max(), 20)
+        ax.plot(x, constante + pente * x, color=BLEU, lw=2.5, label=f"Pente naïve = {pente:.3f}")
+        ax.set_title(titre, fontsize=11)
+        ax.set_xlabel("Ventes de glaces")
+        ax.legend(loc="upper left")
+    axes[0].set_ylabel("Noyades")
+    fig.colorbar(points, ax=axes, label="Température (°C)")
+    fig.suptitle("Effet vrai = 0 : le tirage au sort supprime la confusion", fontweight="bold", y=1.03)
+    sauvegarder(fig, "p4_02_experience_aleatoire.png")
+    return fig
+
+
+def figure_dag_instrument():
+    """Schéma causal : grève -> glaces -> noyades, avec la température non observée qui cause glaces et noyades."""
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    noeuds = {"Grève des livreurs\n(instrument)": (0.13, 0.25), "Ventes de glaces": (0.5, 0.25),
+              "Noyades": (0.88, 0.25), "Température\n(non observée)": (0.69, 0.82)}
+    for nom, (x, y) in noeuds.items():
+        style = "--" if "non observée" in nom else "-"
+        ax.text(x, y, nom, ha="center", va="center", fontsize=11, fontweight="bold",
+                bbox={"boxstyle": "round,pad=0.6", "facecolor": "#f3f2ee", "edgecolor": GRIS, "linestyle": style})
+    fleche = {"arrowstyle": "-|>", "color": BLEU, "lw": 2, "mutation_scale": 18, "shrinkA": 38, "shrinkB": 38}
+    # Flèches horizontales tracées de bord à bord des cases (les cases sont larges)
+    fleche_h = dict(fleche, shrinkA=0, shrinkB=0)
+    ax.annotate("", xy=(0.36, 0.25), xytext=(0.28, 0.25), arrowprops=fleche_h)
+    ax.annotate("", xy=(0.8, 0.25), xytext=(0.645, 0.25), arrowprops=dict(fleche_h, color=GRIS, linestyle="--"))
+    fleche_temp = dict(fleche, color=ORANGE)
+    ax.annotate("", xy=noeuds["Ventes de glaces"], xytext=noeuds["Température\n(non observée)"], arrowprops=fleche_temp)
+    ax.annotate("", xy=noeuds["Noyades"], xytext=noeuds["Température\n(non observée)"], arrowprops=fleche_temp)
+    ax.text(0.72, 0.13, "effet à estimer", ha="center", fontsize=10, color=TEXTE)
+    ax.text(0.5, 0.0, "L'instrument agit sur les noyades uniquement via les glaces, et ne dépend pas de la température.",
+            ha="center", fontsize=9, color=TEXTE, style="italic")
+    ax.set_title("Variable instrumentale : contourner un confondeur non observé")
+    sauvegarder(fig, "p4_03_dag_instrument.png")
     return fig

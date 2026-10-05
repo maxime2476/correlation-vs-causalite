@@ -6,6 +6,7 @@ import statsmodels.api as sm
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.inspection import permutation_importance
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
+from statsmodels.sandbox.regression.gmm import IV2SLS
 from statsmodels.stats.stattools import durbin_watson
 from statsmodels.tsa.stattools import adfuller, coint
 
@@ -273,3 +274,71 @@ def monte_carlo_taille(tailles: list, n_rep: int, effet: float = 0.0, seed: int 
     """Monte Carlo des estimateurs pour plusieurs tailles d'échantillon."""
     return pd.concat([monte_carlo_estimateurs(n_rep, n=n, effet=effet, seed=seed + 1000 * i)
                       for i, n in enumerate(tailles)], ignore_index=True)
+
+
+# ---------------------------------------------------------------------------
+# Partie 4 : agir sur le monde (intervention, expérience aléatoire, instrument)
+# ---------------------------------------------------------------------------
+
+def prevoir_intervention(effet: float, facteur: float = 0.5, seed: int = 123) -> dict:
+    """Taxe qui multiplie les ventes de glaces par `facteur` : noyades prédites par le GB et le Double ML, et réalité."""
+    avant = simulation.simuler_glaces_noyades(effet=effet, seed=seed)
+    apres = simulation.simuler_glaces_noyades(effet=effet, seed=seed, facteur_glaces=facteur)
+    gb = GradientBoostingRegressor(random_state=0).fit(avant[["glaces"]], avant["noyades"])
+    glaces_apres = avant[["glaces"]] * facteur
+    effet_dml = effet_double_ml(avant)["effet"]
+    return {
+        "Effet vrai": effet,
+        "Noyades observées": avant["noyades"].mean(),
+        "Réalité après la taxe": apres["noyades"].mean(),
+        "Prévision du Gradient Boosting": gb.predict(glaces_apres).mean(),
+        "Prévision du Double ML": avant["noyades"].mean() + effet_dml * (glaces_apres["glaces"] - avant["glaces"]).mean(),
+    }
+
+
+def tableau_intervention(effets: list, facteur: float = 0.5) -> pd.DataFrame:
+    """Prévisions et réalité après la taxe, pour plusieurs effets vrais."""
+    return pd.DataFrame([prevoir_intervention(effet, facteur) for effet in effets])
+
+
+def tableau_experience(effet_vrai: float) -> pd.DataFrame:
+    """Compare l'estimation naïve sur données observées et sur une expérience aléatoire."""
+    observees = simulation.simuler_glaces_noyades(effet=effet_vrai)
+    experience = ajouter_temperature_carre(simulation.simuler_experience_aleatoire(effet=effet_vrai))
+    resultats = {
+        "OLS naïf (données observées)": effet_ols(observees, ["glaces"]),
+        "OLS naïf (expérience)": effet_ols(experience, ["glaces"]),
+        "OLS + T + T² (expérience)": effet_ols(experience, ["glaces", "temperature", "temperature2"]),
+        "Gradient Boosting naïf (expérience)": effet_gradient_boosting(experience, ["glaces"]),
+    }
+    lignes = []
+    for methode, res in resultats.items():
+        lignes.append({"Méthode": methode, "Effet estimé": res["effet"], "IC 95 % bas": res["ic_bas"],
+                       "IC 95 % haut": res["ic_haut"], "Écart à la vraie valeur": res["effet"] - effet_vrai})
+    return pd.DataFrame(lignes)
+
+
+def effet_iv(df: pd.DataFrame) -> dict:
+    """Doubles moindres carrés (2SLS) avec la grève comme instrument des glaces : effet, IC à 95 % et F de 1re étape."""
+    modele = IV2SLS(df["noyades"], sm.add_constant(df[["glaces"]]), instrument=sm.add_constant(df[["greve"]])).fit()
+    ic = modele.conf_int().loc["glaces"]
+    premiere_etape = sm.OLS(df["glaces"], sm.add_constant(df[["greve"]])).fit()
+    return {"effet": modele.params["glaces"], "ic_bas": ic.iloc[0], "ic_haut": ic.iloc[1],
+            "f_premiere_etape": premiere_etape.fvalue}
+
+
+def tableau_instrument(effet_vrai: float) -> pd.DataFrame:
+    """Température non observée : OLS naïf contre variable instrumentale (bonne, faible, invalide)."""
+    donnees = {
+        "OLS naïf": simulation.simuler_instrument(effet=effet_vrai),
+        "IV : bon instrument": simulation.simuler_instrument(effet=effet_vrai),
+        "IV : instrument faible": simulation.simuler_instrument(effet=effet_vrai, effet_greve_glaces=-2.0),
+        "IV : instrument invalide": simulation.simuler_instrument(effet=effet_vrai, effet_greve_noyades=1.0),
+    }
+    lignes = []
+    for methode, df in donnees.items():
+        res = effet_ols(df, ["glaces"]) if methode == "OLS naïf" else effet_iv(df)
+        lignes.append({"Méthode": methode, "Effet estimé": res["effet"], "IC 95 % bas": res["ic_bas"],
+                       "IC 95 % haut": res["ic_haut"], "Écart à la vraie valeur": res["effet"] - effet_vrai,
+                       "F 1re étape": res.get("f_premiere_etape", np.nan)})
+    return pd.DataFrame(lignes)

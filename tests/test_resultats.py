@@ -59,3 +59,27 @@ def test_resume_monte_carlo_calcule_biais_et_couverture():
     assert resume.loc[0, "biais"] == pytest.approx(0.2)
     assert resume.loc[0, "couverture"] == pytest.approx(50)
     assert resume.loc[0, "largeur_ic"] == pytest.approx(0.25)
+
+
+def test_intervention_le_modele_predictif_se_trompe():
+    resultat = analyse.prevoir_intervention(effet=0.0, facteur=0.5)
+    # En réalité la taxe ne change rien, mais le Gradient Boosting prédit une forte baisse
+    assert abs(resultat["Réalité après la taxe"] - resultat["Noyades observées"]) < 1e-9
+    assert resultat["Prévision du Gradient Boosting"] < 0.8 * resultat["Noyades observées"]
+    assert abs(resultat["Prévision du Double ML"] - resultat["Réalité après la taxe"]) < 0.5
+
+
+@pytest.mark.parametrize("effet_vrai", [0.0, 0.5])
+def test_experience_aleatoire_ols_naif_sans_biais(effet_vrai):
+    df = simulation.simuler_experience_aleatoire(effet=effet_vrai)
+    assert abs(analyse.effet_ols(df, ["glaces"])["effet"] - effet_vrai) < 0.05
+
+
+@pytest.mark.parametrize("effet_vrai", [0.0, 0.5])
+def test_variable_instrumentale(effet_vrai):
+    bon = analyse.effet_iv(simulation.simuler_instrument(effet=effet_vrai))
+    invalide = analyse.effet_iv(simulation.simuler_instrument(effet=effet_vrai, effet_greve_noyades=1.0))
+    assert abs(bon["effet"] - effet_vrai) < 0.05
+    assert bon["f_premiere_etape"] > 10
+    # Instrument invalide : l'IC exclut la vraie valeur
+    assert not (invalide["ic_bas"] <= effet_vrai <= invalide["ic_haut"])

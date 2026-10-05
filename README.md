@@ -66,9 +66,40 @@ qu'une glace de plus cause 0.17 noyade.
 ![Erreur de mesure](figures/p3_03_erreur_mesure.png)
 ![Mauvais contrôle](figures/p3_06_mauvais_controle.png)
 
-Les 18 figures sont dans [`figures/`](figures/).
+## 4. Agir sur le monde : intervention, expérience, instrument
 
-## 4. Ce que ça montre
+**Une décision prise avec un modèle prédictif.** Une mairie envisage une taxe qui divise par deux les ventes de
+glaces et demande au Gradient Boosting combien de noyades seront évitées. On simule le même monde après la taxe
+pour connaître la réalité :
+
+| Effet vrai | Noyades avant | Prévision du GB naïf | Prévision du Double ML | Réalité après la taxe |
+|---|---|---|---|---|
+| 0 | 10.4 | **5.3** | 10.3 | 10.4 |
+| 0.5 | 41.4 | **20.8** | 25.9 | 25.9 |
+
+Le modèle prédictif annonce des noyades divisées par deux alors que rien ne change, ou surestime la baisse
+quand l'effet existe. Il répond à « combien de noyades les jours où l'on vend peu de glaces ? », pas à
+« combien si l'on force les ventes à baisser ? ».
+
+![Intervention](figures/p4_01_intervention.png)
+
+**L'expérience aléatoire.** Si les glaces sont tirées au sort, la simple régression naïve retrouve le vrai effet
+(0.001 au lieu de 0, 0.501 au lieu de 0.5) : le tirage au sort coupe le lien avec la température.
+
+![Expérience aléatoire](figures/p4_02_experience_aleatoire.png)
+
+**La variable instrumentale, quand la température n'est pas observée.** Une grève des livreurs, certains jours
+tirés au hasard, fait baisser les ventes sans agir directement sur les noyades. Les doubles moindres carrés
+retrouvent l'effet sans utiliser la température : -0.012 [-0.030 ; 0.006] pour un effet vrai de 0, et 0.488
+[0.470 ; 0.506] pour 0.5. Mais un instrument faible (F de première étape = 0.6) donne un IC de [-1.5 ; 0.9], et un
+instrument invalide (la grève touche aussi les maîtres-nageurs) donne -0.065 [-0.088 ; -0.042] : une conclusion
+fausse qui a l'air solide.
+
+![Variable instrumentale](figures/p4_04_variable_instrumentale.png)
+
+Les 22 figures sont dans [`figures/`](figures/).
+
+## 5. Ce que ça montre
 
 - **Prédire ≠ expliquer.** Un bon R² ou une forte importance de variable ne disent rien de l'effet causal. Le
   modèle naïf n'est pas « mauvais » : il répond très bien à une autre question. L'OLS naïf, lui, est très précis
@@ -79,8 +110,11 @@ Les 18 figures sont dans [`figures/`](figures/).
 - **L'intérêt du Double ML :** il combine la flexibilité du machine learning (inutile de connaître la forme
   exacte de l'effet de la température) et l'inférence de l'économétrie (un intervalle de confiance). Il retrouve
   l'effet nul comme l'effet de 0.5.
+- **Une décision est une intervention.** Utiliser un modèle prédictif pour choisir une action, c'est lui poser une
+  question causale à laquelle il n'a pas été entraîné à répondre. Quand c'est possible, l'expérience aléatoire règle
+  le problème ; sinon, il faut une stratégie d'identification (contrôler les confondeurs, ou trouver un instrument).
 
-## 5. Limites
+## 6. Limites
 
 - Une simulation ne montre que ce qu'on y met : les résultats illustrent des mécanismes, ils ne prouvent rien
   sur des données réelles.
@@ -90,8 +124,10 @@ Les 18 figures sont dans [`figures/`](figures/).
 - L'OLS dépend de la bonne forme fonctionnelle : sans le terme en température², il reste biaisé (0.047 au lieu de 0).
 - Le Double ML a besoin de beaucoup de données, et ses intervalles de confiance sont un peu trop optimistes ici
   (couverture de 87 % au lieu de 95 %), car ses garanties sont asymptotiques.
+- Une variable instrumentale ne vaut que par son hypothèse d'exclusion, qui ne se teste pas dans les données : elle
+  doit être justifiée par le raisonnement.
 
-## 6. Références
+## 7. Références
 
 - Yule, G. U. (1926). Why do we sometimes get nonsense-correlations between time-series? *Journal of the Royal
   Statistical Society*, 89(1), 1–63.
@@ -100,7 +136,7 @@ Les 18 figures sont dans [`figures/`](figures/).
   Double/debiased machine learning for treatment and structural parameters. *The Econometrics Journal*, 21(1), C1–C68.
 - Pearl, J. (2009). *Causality: Models, Reasoning, and Inference* (2nd ed.). Cambridge University Press.
 
-## 7. Installation et lancement (PowerShell)
+## 8. Installation et lancement (PowerShell)
 
 ```powershell
 cd correlation-vs-causalite
@@ -116,7 +152,7 @@ Organisation :
 
 - `src/` : simulation, estimations et figures ;
 - `notebook.ipynb` : la démonstration ;
-- `notebooks/` : brouillons d'exploration (01 à 05), écrits avant de ranger le code dans `src/` ;
+- `notebooks/` : brouillons d'exploration (01 à 06), écrits avant de ranger le code dans `src/` ;
 - `figures/` : images générées ;
 - `tests/` : vérifications automatiques.
 
