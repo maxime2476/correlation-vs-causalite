@@ -99,20 +99,65 @@ fausse qui a l'air solide.
 
 Les 22 figures sont dans [`figures/`](figures/).
 
-## 5. Ce que ça montre
+## 5. Conclusion générale
 
-- **Prédire ≠ expliquer.** Un bon R² ou une forte importance de variable ne disent rien de l'effet causal. Le
-  modèle naïf n'est pas « mauvais » : il répond très bien à une autre question. L'OLS naïf, lui, est très précis
-  (IC étroit) et complètement faux.
-- **Identifier le confondeur est l'étape décisive.** Une fois la température prise en compte, les estimations
-  retombent sur la vraie valeur. Le même Gradient Boosting, si on lui donne la température, se rapproche de 0 :
-  ce n'est pas l'algorithme qui est en cause.
-- **L'intérêt du Double ML :** il combine la flexibilité du machine learning (inutile de connaître la forme
-  exacte de l'effet de la température) et l'inférence de l'économétrie (un intervalle de confiance). Il retrouve
-  l'effet nul comme l'effet de 0.5.
-- **Une décision est une intervention.** Utiliser un modèle prédictif pour choisir une action, c'est lui poser une
-  question causale à laquelle il n'a pas été entraîné à répondre. Quand c'est possible, l'expérience aléatoire règle
-  le problème ; sinon, il faut une stratégie d'identification (contrôler les confondeurs, ou trouver un instrument).
+### Deux questions différentes
+
+Tout le projet repose sur une distinction : **prédire** (que va-t-il se passer si j'observe X ?) et **expliquer
+pour agir** (que va-t-il se passer si je modifie X ?). La première se juge sur des données de test (R², validation
+croisée). La seconde ne se juge pas avec les données seules : elle repose sur des hypothèses sur la façon dont les
+données ont été produites. Aucune métrique de prédiction ne permet de vérifier une réponse causale.
+
+### Bilan des méthodes
+
+| Méthode | Question à laquelle elle répond | Hypothèse indispensable | Ce que le projet montre | Quand l'utiliser |
+|---|---|---|---|---|
+| Gradient Boosting (ML prédictif) | Prédire Y à partir de X | Le futur ressemble au passé | R² = 0.78, mais un « effet » de 0.17 au lieu de 0, et -49 % de noyades annoncés après une taxe sans effet | Prévoir, tant qu'on n'agit pas sur X |
+| Importance des variables | Quelles variables aident à prédire ? | Aucune hypothèse causale | Les glaces deviennent la variable la plus importante alors que leur effet est nul | Comprendre un modèle, pas expliquer le monde |
+| OLS naïf | Lien linéaire entre X et Y | Pas de confondeur | Biais de 0.17 avec un IC très étroit : couverture de 0 % | Décrire les données, jamais seul pour conclure |
+| Tests ADF et Engle-Granger | Les séries sont-elles stationnaires ou cointégrées ? | Valeurs critiques approximatives en petit échantillon | Détectent la non-stationnarité qui produit 100 % de faux positifs en niveaux ; Engle-Granger déclare cointégrées 10 % des paires indépendantes | Avant toute régression sur des séries temporelles |
+| OLS avec contrôles | Effet de X à confondeurs fixés | Tous les confondeurs observés et bien mesurés, bonne forme fonctionnelle | Sans biais et couverture de 96 % avec T² ; biais de 0.047 sans | Relations connues, petits échantillons |
+| Double ML | Même question, sans imposer la forme fonctionnelle | Tous les confondeurs observés et bien mesurés, beaucoup de données | Retrouve 0 et 0.5 ; couverture de 87 % ; biaisé à n = 200 ; impuissant face à un confondeur mal mesuré ou un collider | Relations non linéaires ou nombreux contrôles, grands échantillons |
+| Expérience aléatoire | Effet de X quand X est attribué au hasard | Tirage au sort respecté | La régression naïve devient sans biais | Dès qu'on peut expérimenter (A/B test) |
+| Variable instrumentale | Effet de X à partir d'une source de variation externe | Pertinence (F > 10) et exclusion (non testable) | Retrouve l'effet sans observer la température ; inutilisable si l'instrument est faible, faux s'il est invalide | Confondeur non observé et instrument crédible |
+
+### Le raisonnement compte plus que l'algorithme
+
+- Le même Gradient Boosting donne une mauvaise réponse sur des données observées et une bonne sur une expérience
+  aléatoire. Ce qui change, ce n'est pas l'algorithme, c'est la façon dont les données ont été produites.
+- Les choix décisifs se font avant le code : quelle question on pose, quel est le schéma causal (confondeurs,
+  colliders, instruments), quelle stratégie d'identification est crédible. Ajouter des variables « au cas où » peut
+  créer un biais (collider), et une variable mal mesurée en laisse un.
+- Une estimation précise n'est pas une estimation juste : l'OLS naïf, le collider et l'instrument invalide donnent
+  tous des IC étroits autour d'une mauvaise valeur.
+
+### Économétrie et machine learning sont complémentaires
+
+- Le machine learning apporte la flexibilité : les forêts du Double ML apprennent seules l'effet non linéaire de la
+  température. L'économétrie apporte l'identification et l'inférence : orthogonalisation, cross-fitting,
+  intervalles de confiance, instruments, tests de stationnarité.
+- Le Double ML combine les deux, mais il hérite aussi des limites des deux : il dépend des hypothèses
+  d'identification comme l'OLS, et de la qualité des modèles de machine learning (biais à petit n, IC un peu trop
+  étroits).
+
+### Outils et coût
+
+- numpy et pandas suffisent pour simuler ; statsmodels couvre l'économétrie (OLS, ADF, Engle-Granger, 2SLS) ;
+  scikit-learn couvre le machine learning (Gradient Boosting, forêts aléatoires, importance par permutation) ;
+  doubleml implémente le Double ML.
+- Un OLS ou une 2SLS prennent quelques millisecondes, un Double ML quelques secondes. La différence devient sensible
+  dès qu'on répète les estimations : les Monte Carlo du projet prennent environ 10 minutes.
+- La simulation est le seul cadre où l'on connaît la vérité. C'est ce qui la rend utile pour comprendre et tester
+  une méthode, et c'est aussi sa limite : elle ne valide pas une analyse sur des données réelles.
+
+### En pratique : quatre questions avant de conclure
+
+1. Est-ce que je veux prédire, ou savoir ce qui se passe si j'agis ?
+2. Quel est le schéma causal : quels confondeurs, sont-ils observés et bien mesurés, y a-t-il des colliders à ne pas
+   contrôler ?
+3. Quelle stratégie d'identification : expérience, contrôle des confondeurs (OLS ou Double ML), instrument ?
+4. Comment vérifier : la méthode retrouve-t-elle un effet connu sur données simulées, le résultat résiste-t-il à un
+   changement de contrôles, l'échantillon est-il assez grand ?
 
 ## 6. Limites
 
