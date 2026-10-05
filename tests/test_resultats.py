@@ -83,3 +83,21 @@ def test_variable_instrumentale(effet_vrai):
     assert bon["f_premiere_etape"] > 10
     # Instrument invalide : l'IC exclut la vraie valeur
     assert not (invalide["ic_bas"] <= effet_vrai <= invalide["ic_haut"])
+
+
+def test_mediateur_effet_total_et_direct():
+    df = simulation.simuler_mediateur()
+    total = analyse.effet_ols(df, ["temperature"], traitement="temperature")
+    direct = analyse.effet_ols(df, ["temperature", "frequentation"], traitement="temperature")
+    assert abs(total["effet"] - 0.3) < 0.05
+    assert abs(direct["effet"] - 0.1) < 0.05
+
+
+def test_causalite_inverse_signe_inverse_sauf_iv():
+    df = analyse.ajouter_temperature_carre(simulation.simuler_causalite_inverse(effet=-0.2))
+    naif = analyse.effet_ols(df, ["maitres_nageurs"], traitement="maitres_nageurs")
+    iv = analyse.effet_iv(df, traitement="maitres_nageurs", instrument="dotation",
+                          controles=["temperature", "temperature2"])
+    assert naif["effet"] > 0
+    assert iv["ic_bas"] <= -0.2 <= iv["ic_haut"]
+    assert iv["ic_haut"] < 0

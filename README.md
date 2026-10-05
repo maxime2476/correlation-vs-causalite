@@ -97,9 +97,24 @@ fausse qui a l'air solide.
 
 ![Variable instrumentale](figures/p4_04_variable_instrumentale.png)
 
-Les 22 figures sont dans [`figures/`](figures/).
+## 5. Deux autres pièges : le médiateur et la causalité inverse
 
-## 5. Conclusion générale
+**Le médiateur.** La température agit sur les noyades directement (+0.1 par degré) et via la fréquentation des
+plages (+0.2). Sans contrôle, l'OLS donne l'effet total (0.296) ; en contrôlant la fréquentation, il ne reste que
+l'effet direct (0.099), et le Double ML fait de même (0.099). Contrôler un médiateur ne crée pas d'erreur de calcul,
+mais change la question posée.
+
+**La causalité inverse.** Les maîtres-nageurs réduisent les noyades (-0.2 par maître-nageur), mais les mairies en
+déploient plus là où il y a des noyades. L'OLS naïf (+0.62), l'OLS avec la température (+0.46), le Double ML (+0.46)
+et le Gradient Boosting (+0.62) concluent tous que les maîtres-nageurs **augmentent** les noyades. Seule une dotation
+tirée au sort, utilisée comme instrument, retrouve le bon signe : -0.242 [-0.300 ; -0.185].
+
+![Médiateur](figures/p5_01_mediateur.png)
+![Causalité inverse](figures/p5_02_causalite_inverse.png)
+
+Les 24 figures sont dans [`figures/`](figures/).
+
+## 6. Conclusion générale
 
 ### Deux questions différentes
 
@@ -119,15 +134,17 @@ données ont été produites. Aucune métrique de prédiction ne permet de véri
 | OLS avec contrôles | Effet de X à confondeurs fixés | Tous les confondeurs observés et bien mesurés, bonne forme fonctionnelle | Sans biais et couverture de 96 % avec T² ; biais de 0.047 sans | Relations connues, petits échantillons |
 | Double ML | Même question, sans imposer la forme fonctionnelle | Tous les confondeurs observés et bien mesurés, beaucoup de données | Retrouve 0 et 0.5 ; couverture de 87 % ; biaisé à n = 200 ; impuissant face à un confondeur mal mesuré ou un collider | Relations non linéaires ou nombreux contrôles, grands échantillons |
 | Expérience aléatoire | Effet de X quand X est attribué au hasard | Tirage au sort respecté | La régression naïve devient sans biais | Dès qu'on peut expérimenter (A/B test) |
-| Variable instrumentale | Effet de X à partir d'une source de variation externe | Pertinence (F > 10) et exclusion (non testable) | Retrouve l'effet sans observer la température ; inutilisable si l'instrument est faible, faux s'il est invalide | Confondeur non observé et instrument crédible |
+| Variable instrumentale | Effet de X à partir d'une source de variation externe | Pertinence (F > 10) et exclusion (non testable) | Retrouve l'effet sans observer la température, et le bon signe en cas de causalité inverse ; inutilisable si l'instrument est faible, faux s'il est invalide | Confondeur non observé ou causalité inverse, et instrument crédible |
 
 ### Le raisonnement compte plus que l'algorithme
 
 - Le même Gradient Boosting donne une mauvaise réponse sur des données observées et une bonne sur une expérience
   aléatoire. Ce qui change, ce n'est pas l'algorithme, c'est la façon dont les données ont été produites.
 - Les choix décisifs se font avant le code : quelle question on pose, quel est le schéma causal (confondeurs,
-  colliders, instruments), quelle stratégie d'identification est crédible. Ajouter des variables « au cas où » peut
-  créer un biais (collider), et une variable mal mesurée en laisse un.
+  colliders, médiateurs, instruments, sens des flèches), quelle stratégie d'identification est crédible. Ajouter des
+  variables « au cas où » peut créer un biais (collider) ou changer la question posée (médiateur : effet direct au
+  lieu de l'effet total), et une variable mal mesurée laisse un biais. Quand la causalité va dans les deux sens,
+  aucun contrôle ne suffit : les maîtres-nageurs semblent augmenter les noyades alors qu'ils les réduisent.
 - Une estimation précise n'est pas une estimation juste : l'OLS naïf, le collider et l'instrument invalide donnent
   tous des IC étroits autour d'une mauvaise valeur.
 
@@ -153,13 +170,13 @@ données ont été produites. Aucune métrique de prédiction ne permet de véri
 ### En pratique : quatre questions avant de conclure
 
 1. Est-ce que je veux prédire, ou savoir ce qui se passe si j'agis ?
-2. Quel est le schéma causal : quels confondeurs, sont-ils observés et bien mesurés, y a-t-il des colliders à ne pas
-   contrôler ?
+2. Quel est le schéma causal : quels confondeurs, sont-ils observés et bien mesurés, y a-t-il des colliders ou des
+   médiateurs à ne pas contrôler, la causalité peut-elle aller dans les deux sens ?
 3. Quelle stratégie d'identification : expérience, contrôle des confondeurs (OLS ou Double ML), instrument ?
 4. Comment vérifier : la méthode retrouve-t-elle un effet connu sur données simulées, le résultat résiste-t-il à un
    changement de contrôles, l'échantillon est-il assez grand ?
 
-## 6. Limites
+## 7. Limites
 
 - Une simulation ne montre que ce qu'on y met : les résultats illustrent des mécanismes, ils ne prouvent rien
   sur des données réelles.
@@ -172,7 +189,7 @@ données ont été produites. Aucune métrique de prédiction ne permet de véri
 - Une variable instrumentale ne vaut que par son hypothèse d'exclusion, qui ne se teste pas dans les données : elle
   doit être justifiée par le raisonnement.
 
-## 7. Références
+## 8. Références
 
 - Yule, G. U. (1926). Why do we sometimes get nonsense-correlations between time-series? *Journal of the Royal
   Statistical Society*, 89(1), 1–63.
@@ -181,7 +198,7 @@ données ont été produites. Aucune métrique de prédiction ne permet de véri
   Double/debiased machine learning for treatment and structural parameters. *The Econometrics Journal*, 21(1), C1–C68.
 - Pearl, J. (2009). *Causality: Models, Reasoning, and Inference* (2nd ed.). Cambridge University Press.
 
-## 8. Installation et lancement (PowerShell)
+## 9. Installation et lancement (PowerShell)
 
 ```powershell
 cd correlation-vs-causalite
@@ -197,7 +214,7 @@ Organisation :
 
 - `src/` : simulation, estimations et figures ;
 - `notebook.ipynb` : la démonstration ;
-- `notebooks/` : brouillons d'exploration (01 à 06), écrits avant de ranger le code dans `src/` ;
+- `notebooks/` : brouillons d'exploration (01 à 07), écrits avant de ranger le code dans `src/` ;
 - `figures/` : images générées ;
 - `tests/` : vérifications automatiques.
 

@@ -71,3 +71,33 @@ def simuler_instrument(n: int = 5000, effet: float = 0.0, seed: int = 777, effet
     noyades = (0.3 * temperature + 0.01 * temperature**2 + effet * glaces
                + effet_greve_noyades * greve + rng.normal(0, 2, n))
     return pd.DataFrame({"temperature": temperature, "greve": greve, "glaces": glaces, "noyades": noyades})
+
+
+def simuler_mediateur(n: int = 5000, seed: int = 2024) -> pd.DataFrame:
+    """La température agit sur les noyades directement (+0.1 par degré) et via la fréquentation des plages (+0.2).
+
+    Effet total de la température = 0.3, effet direct = 0.1.
+    """
+    rng = np.random.default_rng(seed)
+    temperature = rng.normal(20, 6, n)
+    frequentation = 50 + 10 * temperature + rng.normal(0, 30, n)  # en centaines de personnes
+    noyades = 0.1 * temperature + 0.02 * frequentation + rng.normal(0, 2, n)
+    return pd.DataFrame({"temperature": temperature, "frequentation": frequentation, "noyades": noyades})
+
+
+def simuler_causalite_inverse(n: int = 5000, seed: int = 99, effet: float = -0.2,
+                              reaction: float = 1.5) -> pd.DataFrame:
+    """Les maîtres-nageurs réduisent les noyades (`effet`), mais les mairies en déploient plus là où il y a des noyades.
+
+    Système simultané : N = base + effet·M et M = reaction·N + u, résolu pour N.
+    `dotation` : maîtres-nageurs supplémentaires attribués par tirage au sort (instrument).
+    """
+    rng = np.random.default_rng(seed)
+    temperature = rng.normal(20, 6, n)
+    dotation = rng.binomial(1, 0.3, n)
+    base = 0.3 * temperature + 0.01 * temperature**2 + rng.normal(0, 2, n)
+    u = 3 * dotation + rng.normal(0, 1, n)
+    noyades = (base + effet * u) / (1 - effet * reaction)
+    maitres_nageurs = reaction * noyades + u
+    return pd.DataFrame({"temperature": temperature, "dotation": dotation,
+                         "maitres_nageurs": maitres_nageurs, "noyades": noyades})

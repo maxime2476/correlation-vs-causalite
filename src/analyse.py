@@ -121,37 +121,39 @@ def ajouter_temperature_carre(df: pd.DataFrame) -> pd.DataFrame:
     return df.assign(temperature2=df["temperature"] ** 2)
 
 
-def effet_gradient_boosting(df: pd.DataFrame, variables: list, seed: int = 0) -> dict:
-    """Gradient Boosting de noyades sur `variables` : R² en validation croisée et effet implicite des glaces.
+def effet_gradient_boosting(df: pd.DataFrame, variables: list, seed: int = 0, traitement: str = "glaces",
+                            cible: str = "noyades") -> dict:
+    """Gradient Boosting de `cible` sur `variables` : R² en validation croisée et effet implicite du traitement.
 
-    Effet implicite = moyenne de prédiction(glaces + 1) - prédiction(glaces), les autres variables inchangées.
+    Effet implicite = moyenne de prédiction(traitement + 1) - prédiction(traitement), les autres variables inchangées.
     """
-    X, y = df[variables], df["noyades"]
+    X, y = df[variables], df[cible]
     modele = GradientBoostingRegressor(random_state=seed)
     r2_cv = cross_val_score(modele, X, y, cv=KFold(5, shuffle=True, random_state=seed), scoring="r2").mean()
     modele.fit(X, y)
     X_plus_un = X.copy()
-    X_plus_un["glaces"] = X_plus_un["glaces"] + 1
+    X_plus_un[traitement] = X_plus_un[traitement] + 1
     effet = np.mean(modele.predict(X_plus_un) - modele.predict(X))
     return {"effet": effet, "ic_bas": np.nan, "ic_haut": np.nan, "r2_cv": r2_cv, "modele": modele}
 
 
-def effet_ols(df: pd.DataFrame, variables: list) -> dict:
-    """OLS de noyades sur `variables` (qui contient 'glaces') : coefficient des glaces et IC à 95 %."""
-    modele = sm.OLS(df["noyades"], sm.add_constant(df[variables])).fit()
-    ic = modele.conf_int().loc["glaces"]
-    return {"effet": modele.params["glaces"], "ic_bas": ic.iloc[0], "ic_haut": ic.iloc[1]}
+def effet_ols(df: pd.DataFrame, variables: list, traitement: str = "glaces", cible: str = "noyades") -> dict:
+    """OLS de `cible` sur `variables` (qui contient `traitement`) : coefficient du traitement et IC à 95 %."""
+    modele = sm.OLS(df[cible], sm.add_constant(df[variables])).fit()
+    ic = modele.conf_int().loc[traitement]
+    return {"effet": modele.params[traitement], "ic_bas": ic.iloc[0], "ic_haut": ic.iloc[1]}
 
 
 def effet_double_ml(df: pd.DataFrame, controles: list = None, n_estimators: int = 200,
-                    min_samples_leaf: int = 5, seed: int = 0) -> dict:
-    """Double ML (modèle partiellement linéaire) avec des forêts aléatoires et 5 folds : effet des glaces et IC à 95 %.
+                    min_samples_leaf: int = 5, seed: int = 0, traitement: str = "glaces",
+                    cible: str = "noyades") -> dict:
+    """Double ML (modèle partiellement linéaire) avec des forêts aléatoires et 5 folds : effet du traitement et IC à 95 %.
 
     `controles` : variables de contrôle données au modèle (par défaut la température).
     """
     if controles is None:
         controles = ["temperature"]
-    donnees = dml.DoubleMLData(df, y_col="noyades", d_cols="glaces", x_cols=controles)
+    donnees = dml.DoubleMLData(df, y_col=cible, d_cols=traitement, x_cols=controles)
     # Le calcul parallèle ne vaut le coût de lancement des processus que sur les grands échantillons
     n_jobs = -1 if len(df) >= 2000 else 1
     foret_y = RandomForestRegressor(n_estimators=n_estimators, min_samples_leaf=min_samples_leaf,
@@ -161,7 +163,7 @@ def effet_double_ml(df: pd.DataFrame, controles: list = None, n_estimators: int 
     np.random.seed(seed)  # DoubleML tire le découpage en folds avec le générateur global de numpy
     modele = dml.DoubleMLPLR(donnees, foret_y, foret_d, n_folds=5)
     modele.fit()
-    ic = modele.confint(level=0.95).loc["glaces"]
+    ic = modele.confint(level=0.95).loc[traitement]
     return {"effet": modele.coef[0], "ic_bas": ic.iloc[0], "ic_haut": ic.iloc[1]}
 
 
@@ -318,13 +320,21 @@ def tableau_experience(effet_vrai: float) -> pd.DataFrame:
     return pd.DataFrame(lignes)
 
 
-def effet_iv(df: pd.DataFrame) -> dict:
-    """Doubles moindres carrés (2SLS) avec la grève comme instrument des glaces : effet, IC à 95 % et F de 1re étape."""
-    modele = IV2SLS(df["noyades"], sm.add_constant(df[["glaces"]]), instrument=sm.add_constant(df[["greve"]])).fit()
-    ic = modele.conf_int().loc["glaces"]
-    premiere_etape = sm.OLS(df["glaces"], sm.add_constant(df[["greve"]])).fit()
-    return {"effet": modele.params["glaces"], "ic_bas": ic.iloc[0], "ic_haut": ic.iloc[1],
-            "f_premiere_etape": premiere_etape.fvalue}
+def effet_iv(df: pd.DataFrame, traitement: str = "glaces", instrument: str = "greve", controles: list = None,
+             cible: str = "noyades") -> dict:
+    """Doubles moindres carrés (2SLS) : effet du traitement instrumenté, IC à 95 % et F de 1re étape.
+
+    `controles` : variables exogènes ajoutées dans les deux étapes (pour la précision).
+    """
+    if controles is None:
+        controles = []
+    X = sm.add_constant(df[[traitement] + controles])
+    Z = sm.add_constant(df[[instrument] + controles])
+    modele = IV2SLS(df[cible], X, instrument=Z).fit()
+    ic = modele.conf_int().loc[traitement]
+    premiere_etape = sm.OLS(df[traitement], Z).fit()
+    return {"effet": modele.params[traitement], "ic_bas": ic.iloc[0], "ic_haut": ic.iloc[1],
+            "f_premiere_etape": premiere_etape.tvalues[instrument] ** 2}  # un seul instrument : F = t²
 
 
 def tableau_instrument(effet_vrai: float) -> pd.DataFrame:
@@ -341,4 +351,43 @@ def tableau_instrument(effet_vrai: float) -> pd.DataFrame:
         lignes.append({"Méthode": methode, "Effet estimé": res["effet"], "IC 95 % bas": res["ic_bas"],
                        "IC 95 % haut": res["ic_haut"], "Écart à la vraie valeur": res["effet"] - effet_vrai,
                        "F 1re étape": res.get("f_premiere_etape", np.nan)})
+    return pd.DataFrame(lignes)
+
+
+# ---------------------------------------------------------------------------
+# Partie 5 : deux autres pièges (médiateur, causalité inverse)
+# ---------------------------------------------------------------------------
+
+def tableau_mediateur() -> pd.DataFrame:
+    """Effet de la température sur les noyades, avec ou sans contrôle du médiateur (la fréquentation)."""
+    df = simulation.simuler_mediateur()
+    resultats = {
+        "OLS sans contrôle": effet_ols(df, ["temperature"], traitement="temperature"),
+        "OLS + fréquentation": effet_ols(df, ["temperature", "frequentation"], traitement="temperature"),
+        "Double ML (contrôle = fréquentation)": effet_double_ml(df, controles=["frequentation"],
+                                                                traitement="temperature"),
+    }
+    lignes = []
+    for methode, res in resultats.items():
+        lignes.append({"Méthode": methode, "Effet estimé": res["effet"], "IC 95 % bas": res["ic_bas"],
+                       "IC 95 % haut": res["ic_haut"]})
+    return pd.DataFrame(lignes)
+
+
+def tableau_causalite_inverse(effet_vrai: float = -0.2) -> pd.DataFrame:
+    """Effet des maîtres-nageurs sur les noyades quand les noyades causent aussi les maîtres-nageurs."""
+    df = ajouter_temperature_carre(simulation.simuler_causalite_inverse(effet=effet_vrai))
+    options = {"traitement": "maitres_nageurs"}
+    resultats = {
+        "OLS naïf": effet_ols(df, ["maitres_nageurs"], **options),
+        "OLS + T + T²": effet_ols(df, ["maitres_nageurs", "temperature", "temperature2"], **options),
+        "Double ML (contrôle = T)": effet_double_ml(df, **options),
+        "Gradient Boosting naïf": effet_gradient_boosting(df, ["maitres_nageurs"], **options),
+        "IV : dotation tirée au sort (+ T, T²)": effet_iv(df, instrument="dotation",
+                                                          controles=["temperature", "temperature2"], **options),
+    }
+    lignes = []
+    for methode, res in resultats.items():
+        lignes.append({"Méthode": methode, "Effet estimé": res["effet"], "IC 95 % bas": res["ic_bas"],
+                       "IC 95 % haut": res["ic_haut"], "Écart à la vraie valeur": res["effet"] - effet_vrai})
     return pd.DataFrame(lignes)

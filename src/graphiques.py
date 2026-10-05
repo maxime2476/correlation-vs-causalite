@@ -472,3 +472,74 @@ def figure_dag_instrument():
     ax.set_title("Variable instrumentale : contourner un confondeur non observé")
     sauvegarder(fig, "p4_03_dag_instrument.png")
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Partie 5 : deux autres pièges
+# ---------------------------------------------------------------------------
+
+def tracer_estimations(ax, tableau, couleurs: list):
+    """Points et IC à 95 % d'un tableau d'estimations, une ligne par méthode (de haut en bas)."""
+    positions = np.arange(len(tableau))[::-1]
+    for pos, couleur, (_, ligne) in zip(positions, couleurs, tableau.iterrows()):
+        ax.errorbar(ligne["Effet estimé"], pos, color=couleur, fmt="o", ms=8, capsize=4, lw=2, markeredgecolor="white",
+                    xerr=[[ligne["Effet estimé"] - ligne["IC 95 % bas"]], [ligne["IC 95 % haut"] - ligne["Effet estimé"]]])
+        ax.annotate(f"{ligne['Effet estimé']:.3f}", (ligne["Effet estimé"], pos), xytext=(0, 9),
+                    textcoords="offset points", ha="center", fontsize=8, color=TEXTE)
+    ax.set_yticks(positions)
+    ax.set_yticklabels(tableau["Méthode"])
+    ax.grid(axis="y", visible=False)
+
+
+def figure_mediateur(tableau):
+    """Schéma du médiateur (fréquentation) et estimations de l'effet de la température avec ou sans ce contrôle."""
+    fig, (ax_dag, ax) = plt.subplots(1, 2, figsize=(13, 4.2), gridspec_kw={"width_ratios": [1, 1.3]})
+    ax_dag.set_xlim(0, 1)
+    ax_dag.set_ylim(0, 1)
+    ax_dag.axis("off")
+    noeuds = {"Température": (0.15, 0.3), "Fréquentation\ndes plages": (0.5, 0.8), "Noyades": (0.85, 0.3)}
+    for nom, (x, y) in noeuds.items():
+        bord = ORANGE if "Fréquentation" in nom else GRIS
+        ax_dag.text(x, y, nom, ha="center", va="center", fontsize=11, fontweight="bold",
+                    bbox={"boxstyle": "round,pad=0.6", "facecolor": "#f3f2ee", "edgecolor": bord, "linewidth": 1.5})
+    fleche = {"arrowstyle": "-|>", "color": BLEU, "lw": 2, "mutation_scale": 18, "shrinkA": 30, "shrinkB": 30}
+    ax_dag.annotate("", xy=noeuds["Fréquentation\ndes plages"], xytext=noeuds["Température"], arrowprops=fleche)
+    ax_dag.annotate("", xy=noeuds["Noyades"], xytext=noeuds["Fréquentation\ndes plages"], arrowprops=fleche)
+    ax_dag.annotate("", xy=noeuds["Noyades"], xytext=noeuds["Température"], arrowprops=dict(fleche, shrinkA=45, shrinkB=35))
+    ax_dag.text(0.5, 0.2, "effet direct : +0.1", ha="center", fontsize=9, color=TEXTE)
+    ax_dag.text(0.5, 0.5, "via la fréquentation\n+0.2", ha="center", va="center", fontsize=9, color=TEXTE)
+    ax_dag.set_title("La fréquentation est un médiateur", fontsize=11)
+
+    tracer_estimations(ax, tableau, couleurs=[BLEU, ORANGE, ORANGE])
+    ax.axvline(0.3, color=VERT, ls="--", lw=1.5, label="Effet total vrai (0.3)")
+    ax.axvline(0.1, color=GRIS, ls=":", lw=2, label="Effet direct vrai (0.1)")
+    ax.set_xlabel("Effet estimé d'un degré de plus sur les noyades")
+    ax.set_title("Contrôler le médiateur donne l'effet direct, pas l'effet total", fontsize=11)
+    ax.legend(loc="lower right", fontsize=8, frameon=True)
+    fig.tight_layout()
+    sauvegarder(fig, "p5_01_mediateur.png")
+    return fig
+
+
+def figure_causalite_inverse(df, tableau, effet_vrai: float = -0.2):
+    """Nuage maîtres-nageurs / noyades et estimations : seule la variable instrumentale trouve le bon signe."""
+    fig, (ax_nuage, ax) = plt.subplots(1, 2, figsize=(13, 4.5), gridspec_kw={"width_ratios": [1, 1.3]})
+    ax_nuage.scatter(df["maitres_nageurs"], df["noyades"], s=4, alpha=0.25, color=GRIS)
+    pente, constante = np.polyfit(df["maitres_nageurs"], df["noyades"], 1)
+    x = np.linspace(df["maitres_nageurs"].min(), df["maitres_nageurs"].max(), 20)
+    ax_nuage.plot(x, constante + pente * x, color=ORANGE, lw=2.5, label=f"Pente naïve = {pente:+.2f}")
+    ax_nuage.set_xlabel("Maîtres-nageurs déployés")
+    ax_nuage.set_ylabel("Noyades")
+    ax_nuage.set_title(f"Effet vrai d'un maître-nageur : {effet_vrai}", fontsize=11)
+    ax_nuage.legend(loc="upper left")
+
+    # Le Gradient Boosting n'a pas d'IC : matplotlib trace alors le point seul
+    tracer_estimations(ax, tableau, couleurs=[BLEU if "IV" in m else ORANGE for m in tableau["Méthode"]])
+    ax.axvline(effet_vrai, color=ROUGE, ls="--", lw=1.5, label="Vraie valeur")
+    ax.axvline(0, color=GRIS, lw=1)
+    ax.set_xlabel("Effet estimé d'un maître-nageur de plus sur les noyades")
+    ax.set_title("Les noyades causent les maîtres-nageurs : le signe s'inverse", fontsize=11)
+    ax.legend(loc="lower right", fontsize=8, frameon=True)
+    fig.tight_layout()
+    sauvegarder(fig, "p5_02_causalite_inverse.png")
+    return fig
