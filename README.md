@@ -1,5 +1,7 @@
 # Corrélation ≠ Causalité : prédire n'est pas expliquer
 
+![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)
+
 À partir de données **simulées dont on connaît la vérité**, ce projet montre qu'un modèle de machine learning peut
 très bien prédire tout en donnant une mauvaise réponse causale, alors que le contrôle du confondeur (OLS bien
 spécifié, Double ML) retrouve le vrai effet. La différence ne vient pas de l'algorithme mais de la question posée :
