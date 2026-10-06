@@ -198,7 +198,7 @@ def pentes_par_tranche(df: pd.DataFrame, n_tranches: int = 10) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Pour aller plus loin : les limites du contrôle du confondeur
+# Partie 3 : limites du contrôle du confondeur
 # ---------------------------------------------------------------------------
 
 def biais_erreur_mesure(df: pd.DataFrame, sigmas: list, n_estimators: int = 100) -> pd.DataFrame:
@@ -239,7 +239,7 @@ def importances_permutation(df: pd.DataFrame, variables: list, seed: int = 0) ->
 
 
 # ---------------------------------------------------------------------------
-# Pour aller plus loin : Monte Carlo des estimateurs
+# Partie 3 : Monte Carlo des estimateurs
 # ---------------------------------------------------------------------------
 
 def monte_carlo_estimateurs(n_rep: int, n: int = 5000, effet: float = 0.0, seed: int = 10_000,
