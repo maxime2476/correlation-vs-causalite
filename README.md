@@ -1,6 +1,12 @@
 # Corrélation ≠ Causalité : prédire n'est pas expliquer
 
+[![tests](https://github.com/maxime2476/correlation-vs-causalite/actions/workflows/tests.yml/badge.svg)](https://github.com/maxime2476/correlation-vs-causalite/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)
+![Jupyter](https://img.shields.io/badge/Jupyter-notebook-F37626?logo=jupyter&logoColor=white)
+![statsmodels](https://img.shields.io/badge/statsmodels-%C3%A9conom%C3%A9trie-4051B5)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white)
+![DoubleML](https://img.shields.io/badge/DoubleML-Double%20ML-2A78D6)
+![Dernier commit](https://img.shields.io/github/last-commit/maxime2476/correlation-vs-causalite)
 
 Ce projet part de données simulées, dont on connaît donc la vérité, pour montrer qu'un modèle de machine learning
 peut très bien prédire et pourtant se tromper sur l'effet causal. Les méthodes qui tiennent compte du confondeur
